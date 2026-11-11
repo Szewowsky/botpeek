@@ -25,10 +25,11 @@ A personal build of [BotPeek](https://github.com/deni0107/botpeek) (MIT, see
   button, opens the folder, and afterwards closes the folder and makes the sidebar
   compact again. A sidebar the user made full stays full. In a narrow background
   window Grok Bot applied the switch back to compact only some 15-30 s later.
-- **Safer replies.** The send button is looked for only next to the "Prompt" box
-  (its parent, then grandparent), never in the transcript, and exactly one must
-  match; otherwise nothing is pressed, so a bot's own "Send"/"Wyślij" option is
-  never taken for it. Requests that must be answered in Grok Bot (cached approvals,
+- **Safer replies.** The send button is looked for outward from the "Prompt" box
+  (its parent, then each wider ancestor, never the window itself), never in the
+  transcript, and exactly one must match at the nearest level that has any;
+  otherwise nothing is pressed, so a bot's own "Send"/"Wyślij" option is never
+  taken for it. Requests that must be answered in Grok Bot (cached approvals,
   forms) are never read from the window, a window reading never lifts that lock or
   turns an approval into a plain choice, and `ReplyCoordinator` rejects any reply
   to them. Polish approve and deny words ("Zatwierdź", "Odrzuć", …) count as an

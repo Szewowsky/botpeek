@@ -196,6 +196,25 @@ final class SendButtonTests: XCTestCase {
         XCTAssertNil(TranscriptParser.parse(window: root).sendButtonNodeID)
     }
 
+    func testSendButtonSeveralLevelsAboveTheBoxIsFound() {
+        // The box is wrapped three groups deep; the button sits in a toolbar
+        // beside the outermost wrapper, in the scope that also holds the transcript.
+        let ax = AXTreeBuilder(strings: .polish)
+        let send = ax.button("Wyślij wiadomość")
+        let box = ax.node("AXGroup", [ax.node("AXGroup", [ax.node("AXGroup", [ax.node("AXTextArea", desc: ax.strings.prompt)])])])
+        let root = ax.node("AXWindow", title: "Grok Bot", [
+            ax.node("AXGroup", [
+                ax.node("AXHeading", desc: "Mail Bot"),
+                ax.node("AXGroup", desc: ax.strings.transcript, [ax.button("Wyślij"), ax.node("AXGroup", [
+                    ax.message("Mail Bot", "21:55:21", ["Wysłać maila do klienta?"], buttons: ["Wyślij", "Anuluj"], dismiss: true),
+                ])]),
+                box,
+                ax.node("AXToolbar", [send]),
+            ]),
+        ])
+        XCTAssertEqual(TranscriptParser.parse(window: root).sendButtonNodeID, send.id)
+    }
+
     func testSendButtonNextToTheBoxInBothLanguages() {
         for (strings, label) in [(GrokUIStrings.english, "Send message"), (.polish, "Wyślij wiadomość")] {
             let ax = AXTreeBuilder(strings: strings)

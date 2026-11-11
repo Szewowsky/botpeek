@@ -89,20 +89,18 @@ public enum TranscriptParser {
 
     // MARK: - Send button
 
-    /// How many levels above the message box the send button is looked for.
-    static let sendButtonSearchLevels = 2
-
-    /// Grok Bot's own send button, next to the message box.
+    /// Grok Bot's own send button, the one nearest the message box.
     ///
     /// Bots choose their options' labels, and an option may read "Send" or
-    /// "Wyślij", so the button is looked for only near the message box (its
-    /// parent, then its grandparent, never the whole window) and never inside
-    /// the transcript. Exactly one match is required at the nearest level that
-    /// has any; anything else gives `nil`, and nothing is pressed.
+    /// "Wyślij", so the button is never looked for inside the transcript. The
+    /// search starts at the message box's parent and widens one ancestor at a
+    /// time (never to the window itself). Exactly one match is required at the
+    /// nearest level that has any; anything else gives `nil`, and nothing is
+    /// pressed.
     static func sendButton(near composer: AXNodeSnapshot, in root: AXNodeSnapshot) -> AXNodeSnapshot? {
         guard let path = path(to: composer.id, in: root) else { return nil }
         // Ancestors of the message box, nearest first, without the window itself.
-        let ancestors = path.dropLast().dropFirst().reversed().prefix(sendButtonSearchLevels)
+        let ancestors = path.dropLast().dropFirst().reversed()
         for scope in ancestors {
             var matches: [AXNodeSnapshot] = []
             func collect(_ node: AXNodeSnapshot) {
