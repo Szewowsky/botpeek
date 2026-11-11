@@ -142,6 +142,70 @@ final class TranscriptParserTests: XCTestCase {
     }
 }
 
+/// The send button is looked for only next to the message box, never in the
+/// transcript, where a bot's own option can carry the same label.
+final class SendButtonTests: XCTestCase {
+    /// A window whose message box sits in its own group with `composerExtras`,
+    /// below a transcript holding `transcriptExtras`.
+    func window(_ ax: AXTreeBuilder, transcriptExtras: [AXNodeSnapshot] = [], composerExtras: [AXNodeSnapshot]) -> AXNodeSnapshot {
+        ax.node("AXWindow", title: "Grok Bot", [
+            ax.node("AXList", desc: ax.strings.bots, [ax.button(ax.strings.newChat)]),
+            ax.node("AXGroup", [
+                ax.node("AXHeading", desc: "Mail Bot"),
+                ax.node("AXGroup", desc: ax.strings.transcript, transcriptExtras + [ax.node("AXGroup", [
+                    ax.message("Mail Bot", "21:55:21", ["Wysłać maila do klienta?"], buttons: ["Wyślij", "Anuluj"], dismiss: true),
+                ])]),
+                ax.node("AXGroup", [ax.node("AXTextArea", desc: ax.strings.prompt)] + composerExtras),
+            ]),
+        ])
+    }
+
+    func testBotOptionInTranscriptIsNeverTheSendButton() {
+        let ax = AXTreeBuilder(strings: .polish)
+        // The bot's option is shallower in the tree than Grok Bot's own button.
+        let send = ax.button("Wyślij wiadomość")
+        let root = window(ax, transcriptExtras: [ax.button("Wyślij")], composerExtras: [
+            ax.node("AXGroup", [ax.node("AXGroup", [ax.node("AXGroup", [send])])]),
+        ])
+        XCTAssertEqual(TranscriptParser.parse(window: root).sendButtonNodeID, send.id)
+    }
+
+    func testOnlyBotOptionsGiveNoSendButton() {
+        // Grok Bot draws its button only once the box has text; until then only
+        // the bot's "Wyślij" option is on screen, and it must not be pressed.
+        let ax = AXTreeBuilder(strings: .polish)
+        let root = window(ax, transcriptExtras: [ax.button("Wyślij")], composerExtras: [])
+        XCTAssertNil(TranscriptParser.parse(window: root).sendButtonNodeID)
+    }
+
+    func testNoSendButtonGivesNil() {
+        let ax = AXTreeBuilder()
+        XCTAssertNil(TranscriptParser.parse(window: window(ax, composerExtras: [])).sendButtonNodeID)
+    }
+
+    func testTwoSendButtonsNextToTheBoxGiveNil() {
+        let ax = AXTreeBuilder(strings: .polish)
+        let root = window(ax, composerExtras: [ax.button("Wyślij wiadomość"), ax.node("AXGroup", [ax.button("Wyślij")])])
+        XCTAssertNil(TranscriptParser.parse(window: root).sendButtonNodeID, "anything unclear means nothing is pressed")
+    }
+
+    func testSendButtonElsewhereInTheWindowIsNotUsed() {
+        let ax = AXTreeBuilder()
+        var root = window(ax, composerExtras: [])
+        root.children.append(ax.button("Send"))
+        XCTAssertNil(TranscriptParser.parse(window: root).sendButtonNodeID)
+    }
+
+    func testSendButtonNextToTheBoxInBothLanguages() {
+        for (strings, label) in [(GrokUIStrings.english, "Send message"), (.polish, "Wyślij wiadomość")] {
+            let ax = AXTreeBuilder(strings: strings)
+            let send = ax.button(label)
+            let root = window(ax, composerExtras: [ax.node("AXGroup", [send])])
+            XCTAssertEqual(TranscriptParser.parse(window: root).sendButtonNodeID, send.id, label)
+        }
+    }
+}
+
 final class DeliveryVerifierTests: XCTestCase {
     func conversation(_ messages: [(String, String, String)], question: [String]? = nil) -> ConversationSnapshot {
         ConversationSnapshot(
@@ -243,10 +307,11 @@ final class PolishInterfaceTests: XCTestCase {
     func testPolishSendButton() {
         let ax = AXTreeBuilder(strings: .polish)
         var window = ax.window(sidebar: [], heading: "Writer", messages: [])
-        window.children.append(ax.button("Prześlij"))
-        window.children.append(ax.button("Wyślij wiadomość"))
+        // Next to the message box, in the same group.
+        window.children[1].children.append(ax.button("Prześlij"))
+        window.children[1].children.append(ax.button("Wyślij wiadomość"))
         let conversation = TranscriptParser.parse(window: window)
-        XCTAssertEqual(conversation.sendButtonNodeID, window.children.last?.id, "Prześlij also means Upload, so it is never the send button")
+        XCTAssertEqual(conversation.sendButtonNodeID, window.children[1].children.last?.id, "Prześlij also means Upload, so it is never the send button")
     }
 
     func testPolishDelivery() {

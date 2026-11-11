@@ -66,7 +66,7 @@ public enum TranscriptParser {
             $0.role == "AXTextArea"
                 && [$0.axDescription, $0.title].contains { $0.map(GrokBotLabels.composer.contains) ?? false }
         }
-        let sendButton = root.first { $0.role == "AXButton" && sendButtonLabels.contains($0.label) }
+        let sendButton = composer.flatMap { sendButton(near: $0, in: root) }
 
         guard let transcript = root.first(where: { $0.axDescription.map(GrokBotLabels.transcript.contains) ?? false }) else {
             return ConversationSnapshot(
@@ -85,6 +85,47 @@ public enum TranscriptParser {
             composerNodeID: composer?.id,
             sendButtonNodeID: sendButton?.id
         )
+    }
+
+    // MARK: - Send button
+
+    /// How many levels above the message box the send button is looked for.
+    static let sendButtonSearchLevels = 2
+
+    /// Grok Bot's own send button, next to the message box.
+    ///
+    /// Bots choose their options' labels, and an option may read "Send" or
+    /// "Wyślij", so the button is looked for only near the message box (its
+    /// parent, then its grandparent, never the whole window) and never inside
+    /// the transcript. Exactly one match is required at the nearest level that
+    /// has any; anything else gives `nil`, and nothing is pressed.
+    static func sendButton(near composer: AXNodeSnapshot, in root: AXNodeSnapshot) -> AXNodeSnapshot? {
+        guard let path = path(to: composer.id, in: root) else { return nil }
+        // Ancestors of the message box, nearest first, without the window itself.
+        let ancestors = path.dropLast().dropFirst().reversed().prefix(sendButtonSearchLevels)
+        for scope in ancestors {
+            var matches: [AXNodeSnapshot] = []
+            func collect(_ node: AXNodeSnapshot) {
+                for child in node.children {
+                    if child.axDescription.map(GrokBotLabels.transcript.contains) ?? false { continue }
+                    if child.role == "AXButton", sendButtonLabels.contains(child.label) { matches.append(child) }
+                    collect(child)
+                }
+            }
+            collect(scope)
+            if matches.isEmpty { continue }
+            return matches.count == 1 ? matches[0] : nil
+        }
+        return nil
+    }
+
+    /// The nodes from `root` down to the node with `id`, both included.
+    static func path(to id: Int, in root: AXNodeSnapshot) -> [AXNodeSnapshot]? {
+        if root.id == id { return [root] }
+        for child in root.children {
+            if let rest = path(to: id, in: child) { return [root] + rest }
+        }
+        return nil
     }
 
     // MARK: - Messages
