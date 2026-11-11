@@ -13,7 +13,20 @@ A personal build of [BotPeek](https://github.com/deni0107/botpeek) (MIT, see
   Polish strings and their sources: `docs/LOCALIZATION.md`.
 - **Polish sign-offs** ("Coś jeszcze?", "Czy mogę jeszcze w czymś pomóc?") don't count
   as questions waiting for an answer.
-- **Tests:** `PolishInterfaceTests` and `testPolishPlainQuestionHeuristics`.
+- **Sidebar folders.** Grok Bot 0.79 files bots in folders, and a collapsed folder's
+  bots have no button, so upstream failed with "bot not found". BotPeek now reads
+  the folders from Grok Bot's cache (`SidebarSectionStore`), opens the one folder
+  holding the bot (`SidebarFolderMatcher`, strict: anything unclear means nothing is
+  pressed), and closes it again when the operation ends
+  (`GrokAccessibilityDriver.restoringSidebar`). Folders the user opened stay open.
+- **Compact sidebar.** In a narrow window Grok Bot shows a compact sidebar without
+  folder buttons. When a bot's folder isn't shown and the sidebar is compact
+  (`SidebarMode`), BotPeek switches it to full with the "Toggle compact sidebar"
+  button, opens the folder, and afterwards closes the folder and makes the sidebar
+  compact again. A sidebar the user made full stays full. In a narrow background
+  window Grok Bot applied the switch back to compact only some 15-30 s later.
+- **Tests:** `PolishInterfaceTests`, `testPolishPlainQuestionHeuristics` and
+  `SidebarFolderTests`.
 - **Bundle identifier** `io.github.szewowsky.botpeek` (upstream:
   `io.github.deni0107.botpeek`), so this build has its own Accessibility permission
   and settings and doesn't collide with an installed upstream copy.

@@ -43,7 +43,7 @@ final class LiveGrokIntegration: GrokIntegration {
         rosterStore = RosterStore(paths: paths)
         conversationStore = ConversationStore(paths: paths)
         statusReader = DesktopStatusReader(paths: paths)
-        driver = GrokAccessibilityDriver(log: log)
+        driver = GrokAccessibilityDriver(log: log, paths: paths)
     }
 
     var rosterIdentities: [BotIdentity] {

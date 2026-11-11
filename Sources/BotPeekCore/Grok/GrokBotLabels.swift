@@ -11,6 +11,17 @@ public enum GrokBotLabels {
     /// The sidebar that lists the bots.
     public static let sidebar: Set<String> = ["Bots", "Boty"]
 
+    /// The sidebar section of hidden bots. Its button reads "<label> <count>" like
+    /// a collapsed folder's, so a folder with this name is never pressed.
+    static let hiddenBotsSection: Set<String> = ["Hidden Bots", "Ukryte Boty"]
+
+    /// The button that switches the sidebar between full and compact. A compact
+    /// sidebar shows only pinned bots and open folders, without folder buttons.
+    static let compactSidebarToggle: Set<String> = ["Toggle compact sidebar", "Przełącz kompaktowy pasek boczny"]
+
+    /// The search button, shown only in the full sidebar.
+    static let searchButton: Set<String> = ["Search", "Szukaj"]
+
     /// Buttons inside the sidebar list that are not bots.
     static let nonBotButtons: Set<String> = [
         "Toggle compact sidebar", "Search", "New chat", "Connect apps",

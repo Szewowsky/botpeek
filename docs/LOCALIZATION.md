@@ -29,8 +29,8 @@ the main process (menus, dialogs), not the window content.
 | English | Polish | Source (Polish file : id) | Seen live |
 |---|---|---|---|
 | Bots (sidebar) | Boty | chunk-agents-BpJ2j0x3.js : `BIDT9R` | yes |
-| Toggle compact sidebar | Przełącz kompaktowy pasek boczny | chunk-agents-BpJ2j0x3.js : `+OFRL2` | yes |
-| Search | Szukaj | chunk-agents-BpJ2j0x3.js : `A1taO8` | yes |
+| Toggle compact sidebar (also switches the sidebar to full and back; `AXExpanded` true = full) | Przełącz kompaktowy pasek boczny | chunk-agents-BpJ2j0x3.js : `+OFRL2` | yes, in both modes |
+| Search (only in the full sidebar; tells full from compact) | Szukaj | chunk-agents-BpJ2j0x3.js : `A1taO8` | yes, full sidebar only |
 | New chat | Nowy czat | chunk-core-BUjmiLIm.js : `hIQkLb` | no |
 | Connect apps | Połącz aplikacje | chunk-agents-BpJ2j0x3.js : `h8AWBN` | yes |
 | Conversation transcript | Zapis rozmowy | chunk-chat-DszGMPu3.js : `j/JxNY` | yes |
@@ -42,12 +42,18 @@ the main process (menus, dialogs), not the window content.
 | Send message | Wyślij wiadomość | chunk-chat-DszGMPu3.js : `pi1oME` | no |
 | Send | Wyślij | chunk-chat-DszGMPu3.js : `JlFcis` | no |
 | Submit | Prześlij - **not used**, see below | chunk-chat-DszGMPu3.js : `hQRttt` | no |
+| Hidden Bots (sidebar section; a folder with this name is never pressed) | Ukryte Boty | chunk-agents-BpJ2j0x3.js : `JuesWZ` | yes (group and button "Ukryte Boty <count>") |
+
+Folder names in the sidebar are the user's own and aren't translated. A collapsed
+folder's button reads `<folder> <count>`, an open one `<folder>`; the folders and
+their bots come from Grok Bot's cache `<account>.sidebar.last-sections` (see
+`docs/INTEGRATION.md`).
 
 Message titles keep the form `<sender> HH:MM:SS` (24-hour clock on a Polish Mac),
 which the existing time pattern already accepts. Seen live: `Ty HH:MM:SS`.
 
 Other Polish labels seen live, for orientation (BotPeek doesn't match them):
-`Lista Botów` (`nhxF89`), `Przypięte Boty` (`vPVg0Q`), `Ukryte Boty` (`JuesWZ`),
+`Lista Botów` (`nhxF89`), `Przypięte Boty` (`vPVg0Q`),
 `Zmień rozmiar paska bocznego` (`cyFaZJ`), `Udostępnij` (`Z8lGw6`),
 `Główny Bot` (`V8a0q9`), `Nowy Bot` (`2hjDEV`, English "New Bot").
 

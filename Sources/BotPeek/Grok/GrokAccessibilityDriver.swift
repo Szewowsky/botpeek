@@ -16,11 +16,17 @@ import BotPeekCore
 /// thread; anything touching AppKit state hops to the main actor.
 final class GrokAccessibilityDriver: @unchecked Sendable {
     private let log: DiagnosticsLog
+    private let sectionStore: SidebarSectionStore
     private var enabledPIDs = Set<pid_t>()
+    /// Sidebar folders BotPeek opened to reach a bot, to close again afterwards.
+    private var openedFolders: [String] = []
+    /// Whether BotPeek switched a compact sidebar to full, to switch back afterwards.
+    private var expandedSidebar = false
     private let lock = NSLock()
 
-    init(log: DiagnosticsLog) {
+    init(log: DiagnosticsLog, paths: GrokBotPaths) {
         self.log = log
+        sectionStore = SidebarSectionStore(paths: paths)
     }
 
     // MARK: Permission and process
@@ -82,7 +88,17 @@ final class GrokAccessibilityDriver: @unchecked Sendable {
     /// heading changes, for callers that read more than the transcript (the
     /// message box's draft). It returns sooner otherwise, once the rendered
     /// messages are the bot's own, and waits at most 400 ms either way.
+    ///
+    /// A sidebar folder opened to reach the bot is closed again before returning.
     func openConversation(for bot: BotIdentity, roster: [BotIdentity], settle: TimeInterval = 0) async throws -> (ConversationSnapshot, AXSnapshot) {
+        try await restoringSidebar(roster: roster) {
+            try await openConversationKeepingFolders(for: bot, roster: roster, settle: settle)
+        }
+    }
+
+    /// Like `openConversation`, but leaves a folder it opened open; callers wrap
+    /// their whole operation in `restoringSidebar`.
+    private func openConversationKeepingFolders(for bot: BotIdentity, roster: [BotIdentity], settle: TimeInterval = 0) async throws -> (ConversationSnapshot, AXSnapshot) {
         var snapshot = try await windowSnapshot()
         var conversation = TranscriptParser.parse(window: snapshot.root)
         log.record(.debug, "ax", "Heading before opening \(bot.id.logTag): \(Self.describe(conversation.heading, bot: bot, roster: roster))")
@@ -103,7 +119,7 @@ final class GrokAccessibilityDriver: @unchecked Sendable {
         switch BotIdentityMatcher.match(bot: bot, roster: roster, sidebar: entries) {
         case .unique(let match): entry = match
         case .ambiguous: throw ReplyError.ambiguousBot
-        case .notFound: throw ReplyError.botNotFound
+        case .notFound: (snapshot, entry) = try await revealInFolder(bot, roster: roster, snapshot: snapshot)
         }
         guard let button = snapshot.element(entry.nodeID), AXTree.press(button) else {
             throw ReplyError.botNotFound
@@ -173,10 +189,192 @@ final class GrokAccessibilityDriver: @unchecked Sendable {
         return "unrecognized (\(heading.count) characters)"
     }
 
+    // MARK: Sidebar folders
+
+    /// A bot filed in a collapsed sidebar folder has no button until the folder
+    /// opens. Opens exactly that folder (see `SidebarFolderMatcher`) and waits
+    /// for the bot's button. Never presses anything when the folder is unclear.
+    private func revealInFolder(_ bot: BotIdentity, roster: [BotIdentity], snapshot: AXSnapshot) async throws -> (AXSnapshot, SidebarEntry) {
+        var snapshot = snapshot
+        let sections = sectionStore.load()
+        var match = sections.map { SidebarFolderMatcher.match(bot: bot, sections: $0, roster: roster, in: snapshot.root) }
+        // In the background Grok Bot may expose a sidebar it hasn't finished
+        // redrawing, without the folder buttons. Nudge it and read it again.
+        for _ in 0..<5 where match == .notShown {
+            if let sidebar = SidebarParser.findSidebar(in: snapshot.root), let element = snapshot.element(sidebar.id) {
+                AXTree.nudge(element)
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+            snapshot = try await windowSnapshot()
+            if let entries = SidebarParser.entries(in: snapshot.root),
+               case .unique(let entry) = BotIdentityMatcher.match(bot: bot, roster: roster, sidebar: entries) {
+                return (snapshot, entry)
+            }
+            match = sections.map { SidebarFolderMatcher.match(bot: bot, sections: $0, roster: roster, in: snapshot.root) }
+        }
+        // A compact sidebar has no folder buttons: switch it to full first.
+        if match == .notShown, let full = try await expandCompactSidebar(snapshot) {
+            snapshot = full
+            if let entries = SidebarParser.entries(in: snapshot.root),
+               case .unique(let entry) = BotIdentityMatcher.match(bot: bot, roster: roster, sidebar: entries) {
+                return (snapshot, entry)
+            }
+            match = sections.map { SidebarFolderMatcher.match(bot: bot, sections: $0, roster: roster, in: snapshot.root) }
+        }
+        guard case .collapsed(let nodeID, let folder) = match else {
+            log.record(.debug, "ax", "No folder to open for \(bot.id.logTag): \(match.map { "\($0)" } ?? "folders unavailable")")
+            throw ReplyError.botNotFound
+        }
+        guard let button = snapshot.element(nodeID), AXTree.press(button) else { throw ReplyError.botNotFound }
+        rememberOpenedFolder(folder)
+        log.record(.info, "ax", "Opened a sidebar folder to reach \(bot.id.logTag)")
+
+        let pressedAt = Date()
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            let current = try await windowSnapshot()
+            if let entries = SidebarParser.entries(in: current.root) {
+                switch BotIdentityMatcher.match(bot: bot, roster: roster, sidebar: entries) {
+                case .unique(let entry):
+                    log.record(.debug, "ax", "Bot shown \(Self.milliseconds(since: pressedAt)) ms after opening its folder")
+                    return (current, entry)
+                case .ambiguous:
+                    throw ReplyError.ambiguousBot
+                case .notFound:
+                    break
+                }
+            }
+            AXTree.nudge(button)
+        }
+        log.record(.warning, "ax", "\(bot.id.logTag) not shown after opening its folder")
+        throw ReplyError.botNotFound
+    }
+
+    /// The sidebar's mode, from the snapshot and the toggle's live `AXExpanded`.
+    private func sidebarMode(_ snapshot: AXSnapshot) -> (mode: SidebarMode, toggle: AXUIElement?) {
+        guard let node = SidebarMode.toggle(in: snapshot.root), let toggle = snapshot.element(node.id) else { return (.unknown, nil) }
+        let expanded = AXTree.copy(toggle, "AXExpanded") as? Bool
+        return (SidebarMode.detect(in: snapshot.root, toggleExpanded: expanded), toggle)
+    }
+
+    /// Switches a compact sidebar to full and returns the new snapshot, or `nil`
+    /// when the sidebar isn't (recognizably) compact. Remembers to switch back.
+    private func expandCompactSidebar(_ snapshot: AXSnapshot) async throws -> AXSnapshot? {
+        let (mode, toggle) = sidebarMode(snapshot)
+        guard mode == .compact, let toggle, AXTree.press(toggle) else {
+            log.record(.debug, "ax", "Sidebar not expanded: mode \(mode)")
+            return nil
+        }
+        setExpandedSidebar(true)
+        let pressedAt = Date()
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            let current = try await windowSnapshot()
+            if sidebarMode(current).mode == .full {
+                log.record(.info, "ax", "Switched the compact sidebar to full (\(Self.milliseconds(since: pressedAt)) ms)")
+                return current
+            }
+            AXTree.nudge(toggle)
+        }
+        log.record(.warning, "ax", "Sidebar didn't switch to full")
+        return nil
+    }
+
+    /// Runs `body`, then undoes what BotPeek changed in the sidebar during it, in
+    /// reverse order: closes the folders it opened, then makes the sidebar compact
+    /// again if BotPeek expanded it. Whatever the user had open stays open.
+    private func restoringSidebar<T>(roster: [BotIdentity], _ body: () async throws -> T) async throws -> T {
+        let result: T
+        do {
+            result = try await body()
+        } catch {
+            await restoreSidebar(roster: roster)
+            throw error
+        }
+        await restoreSidebar(roster: roster)
+        return result
+    }
+
+    private func restoreSidebar(roster: [BotIdentity]) async {
+        await closeOpenedFolders(roster: roster)
+        guard takeExpandedSidebar() else { return }
+        guard let snapshot = try? await windowSnapshot() else { return }
+        let (mode, toggle) = sidebarMode(snapshot)
+        if mode == .compact { return }
+        guard mode == .full, let toggle, AXTree.press(toggle) else {
+            log.record(.warning, "ax", "Couldn't make the sidebar compact again (mode \(mode))")
+            return
+        }
+        var compact = false
+        for _ in 0..<20 where !compact {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            if let current = try? await windowSnapshot() { compact = sidebarMode(current).mode == .compact }
+            if !compact { AXTree.nudge(toggle) }
+        }
+        log.record(compact ? .info : .warning, "ax", compact ? "Made the sidebar compact again" : "Sidebar not compact yet; in a narrow background window Grok Bot has applied this up to ~30 s later")
+    }
+
+    private func setExpandedSidebar(_ value: Bool) {
+        lock.lock()
+        expandedSidebar = value
+        lock.unlock()
+    }
+
+    private func takeExpandedSidebar() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let value = expandedSidebar
+        expandedSidebar = false
+        return value
+    }
+
+    private func rememberOpenedFolder(_ folder: String) {
+        lock.lock()
+        if !openedFolders.contains(folder) { openedFolders.append(folder) }
+        lock.unlock()
+    }
+
+    private func takeOpenedFolders() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        let folders = openedFolders
+        openedFolders = []
+        return folders
+    }
+
+    private func closeOpenedFolders(roster: [BotIdentity]) async {
+        for folder in takeOpenedFolders() {
+            guard let snapshot = try? await windowSnapshot(),
+                  let id = SidebarFolderMatcher.expandedButton(folder: folder, roster: roster, in: snapshot.root),
+                  let button = snapshot.element(id), AXTree.press(button)
+            else {
+                log.record(.warning, "ax", "Couldn't close a sidebar folder BotPeek opened")
+                continue
+            }
+            // Like other presses in the background, give Grok Bot a few nudges
+            // until the folder shows as closed.
+            var closed = false
+            for _ in 0..<10 where !closed {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                if let current = try? await windowSnapshot() {
+                    closed = SidebarFolderMatcher.expandedButton(folder: folder, roster: roster, in: current.root) == nil
+                }
+                if !closed { AXTree.nudge(button) }
+            }
+            log.record(closed ? .info : .warning, "ax", closed ? "Closed the sidebar folder BotPeek opened" : "Sidebar folder BotPeek opened may still be open")
+        }
+    }
+
     // MARK: Choices
 
     func pressChoice(_ label: String, for bot: BotIdentity, roster: [BotIdentity]) async throws -> DeliveryReceipt {
-        let (before, snapshot) = try await waitForQuestion(in: openConversation(for: bot, roster: roster), bot: bot)
+        try await restoringSidebar(roster: roster) {
+            try await pressChoiceKeepingFolders(label, for: bot, roster: roster)
+        }
+    }
+
+    private func pressChoiceKeepingFolders(_ label: String, for bot: BotIdentity, roster: [BotIdentity]) async throws -> DeliveryReceipt {
+        let (before, snapshot) = try await waitForQuestion(in: openConversationKeepingFolders(for: bot, roster: roster), bot: bot)
         guard let question = before.openQuestion else { throw ReplyError.questionNotFound }
         guard let option = question.options.first(where: { $0.label == label }),
               let element = snapshot.element(option.nodeID)
@@ -216,9 +414,15 @@ final class GrokAccessibilityDriver: @unchecked Sendable {
     }
 
     func sendText(_ text: String, to bot: BotIdentity, roster: [BotIdentity], method: DeliveryMethod) async throws -> DeliveryReceipt {
+        try await restoringSidebar(roster: roster) {
+            try await sendTextKeepingFolders(text, to: bot, roster: roster, method: method)
+        }
+    }
+
+    private func sendTextKeepingFolders(_ text: String, to bot: BotIdentity, roster: [BotIdentity], method: DeliveryMethod) async throws -> DeliveryReceipt {
         // Give the message box time to show this conversation's draft, so the
         // check below sees it.
-        let (before, snapshot) = try await openConversation(for: bot, roster: roster, settle: 0.25)
+        let (before, snapshot) = try await openConversationKeepingFolders(for: bot, roster: roster, settle: 0.25)
         guard let composer = snapshot.element(before.composerNodeID) else { throw ReplyError.composerNotFound }
 
         // Never overwrite something the user was typing in Grok Bot.

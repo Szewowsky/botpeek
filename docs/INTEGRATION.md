@@ -62,6 +62,26 @@ Grok Bot (`com.anysphere.sand`) is an Electron app, so BotPeek sets
 [grok-bot-mcp](https://github.com/rthomas24/grok-bot-mcp):
 
 - **Sidebar:** the element labelled `Bots`; each bot is a button labelled `<name>` or `<name>, <status>`.
+  Bots can be filed in folders. A collapsed folder is a button labelled
+  `<folder> <count>` and its bots have no buttons at all; an open folder's button reads
+  `<folder>` (`AXExpanded` doesn't tell folders from bots). The folders and their bots
+  come from the cache `<account>.sidebar.last-sections`
+  (`{ "value": { "sections": [ { "id", "name", "agentIds": […] } ] } }`). When a bot
+  has no button, BotPeek opens its folder, presses the bot, and closes the folder
+  again once the reply (or failure) is done; folders the user opened stay open.
+  It presses a folder only when the bot is filed in exactly one folder, exactly one
+  sidebar button is that folder's, and the folder's name isn't a bot's name or the
+  hidden-bots section's.
+- **Compact sidebar:** in narrow windows the sidebar is compact: pinned bots and open
+  folders' bots only, with no folder buttons and no `Search` button. The
+  `Toggle compact sidebar` button switches modes; its `AXExpanded` is true when the
+  sidebar is full. BotPeek trusts the mode only when that and the search button agree
+  (`SidebarMode`). If a bot's folder isn't shown and the sidebar is compact, BotPeek
+  switches it to full (about 0.3 s in the background), then opens the folder; afterwards
+  it closes the folder and then makes the sidebar compact again. In a narrow background
+  window Grok Bot (0.79.4) applied the switch back to compact only 15-30 s later.
+- **Labels by language:** `GrokBotLabels` (English and Polish); see
+  [LOCALIZATION.md](LOCALIZATION.md).
 - **Conversation:** the first heading is the bot's name; messages sit in
   `Conversation transcript`, each titled `<sender> <time>` (`You` for the user).
 - **Questions:** choice buttons inside a group described with the question, often next to a
