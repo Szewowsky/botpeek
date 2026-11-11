@@ -142,6 +142,9 @@ public enum PlainQuestion {
     static let signOffs = [
         "anything else", "any other questions", "any questions", "anything i can help",
         "help with anything", "else i can do", "else i can help",
+        // Polish: "Coś jeszcze?", "Czy mogę jeszcze w czymś pomóc?", "Masz jakieś pytania?"
+        "coś jeszcze", "jeszcze coś", "czegoś jeszcze", "jeszcze czegoś", "w czymś jeszcze",
+        "jeszcze w czymś", "w czym jeszcze", "jakieś pytania", "jakieś inne pytania",
     ]
 
     public static func isQuestion(_ text: String) -> Bool {

@@ -91,8 +91,30 @@ final class RecordingReplyService: ReplyService {
 
 // MARK: - Accessibility tree builders
 
+/// The interface strings a Grok Bot window shows, per language.
+struct GrokUIStrings {
+    var bots, toggleSidebar, newChat, transcript, prompt, dismissQuestion, customAnswer, messageActionsFor, at: String
+
+    static let english = GrokUIStrings(
+        bots: "Bots", toggleSidebar: "Toggle compact sidebar", newChat: "New chat",
+        transcript: "Conversation transcript", prompt: "Prompt", dismissQuestion: "Dismiss question",
+        customAnswer: "Custom answer", messageActionsFor: "Message actions for", at: "message at"
+    )
+    /// As seen in Grok Bot 0.79.4 on a Polish Mac.
+    static let polish = GrokUIStrings(
+        bots: "Boty", toggleSidebar: "Przełącz kompaktowy pasek boczny", newChat: "Nowy czat",
+        transcript: "Zapis rozmowy", prompt: "Prompt", dismissQuestion: "Ukryj pytanie",
+        customAnswer: "Własna odpowiedź", messageActionsFor: "Akcje wiadomości od", at: "z"
+    )
+}
+
 final class AXTreeBuilder {
     private var nextID = 0
+    let strings: GrokUIStrings
+
+    init(strings: GrokUIStrings = .english) {
+        self.strings = strings
+    }
 
     func node(_ role: String, title: String? = nil, desc: String? = nil, value: String? = nil, _ children: [AXNodeSnapshot] = []) -> AXNodeSnapshot {
         nextID += 1
@@ -106,7 +128,7 @@ final class AXTreeBuilder {
         var children: [AXNodeSnapshot] = [text(sender)] + texts.map(text) + [text(time)]
         if !buttons.isEmpty || dismiss {
             var questionChildren = buttons.map { button($0, [text($0)]) }
-            if dismiss { questionChildren.append(button("Dismiss question")) }
+            if dismiss { questionChildren.append(button(strings.dismissQuestion)) }
             children.append(node("AXGroup", questionChildren))
         }
         return node("AXGroup", title: "\(sender) \(time)", children)
@@ -115,9 +137,9 @@ final class AXTreeBuilder {
     /// A Grok Bot 0.78 message whose question shows inline answer buttons.
     func inlineQuestion(_ sender: String, _ time: String, prompt: String, buttons: [String], customAnswer: Bool = true) -> AXNodeSnapshot {
         var options = buttons.map { button($0) }
-        if customAnswer { options.append(node("AXGroup", [node("AXTextArea", desc: "Custom answer")])) }
+        if customAnswer { options.append(node("AXGroup", [node("AXTextArea", desc: strings.customAnswer)])) }
         return node("AXGroup", title: "\(sender) \(time)", [
-            node("AXGroup", [node("AXGroup", desc: "Message actions for \(sender) message at \(time)", [
+            node("AXGroup", [node("AXGroup", desc: "\(strings.messageActionsFor) \(sender) \(strings.at) \(time)", [
                 node("AXGroup", [node("AXGroup", [text(prompt)]), node("AXGroup", desc: prompt, options)]),
             ])]),
             node("AXGroup", desc: time, [text(time)]),
@@ -128,11 +150,11 @@ final class AXTreeBuilder {
     func window(sidebar: [String], heading: String?, messages: [AXNodeSnapshot], composer: Bool = true) -> AXNodeSnapshot {
         var main: [AXNodeSnapshot] = []
         if let heading { main.append(node("AXHeading", desc: heading)) }
-        main.append(node("AXGroup", desc: "Conversation transcript", [node("AXGroup", messages)]))
-        if composer { main.append(node("AXTextArea", desc: "Prompt")) }
-        let sidebarButtons = (["Toggle compact sidebar", "New chat"] + sidebar).map { button($0) }
+        main.append(node("AXGroup", desc: strings.transcript, [node("AXGroup", messages)]))
+        if composer { main.append(node("AXTextArea", desc: strings.prompt)) }
+        let sidebarButtons = ([strings.toggleSidebar, strings.newChat] + sidebar).map { button($0) }
         return node("AXWindow", title: "Grok Bot", [
-            node("AXList", desc: "Bots", sidebarButtons),
+            node("AXList", desc: strings.bots, sidebarButtons),
             node("AXGroup", main),
         ])
     }

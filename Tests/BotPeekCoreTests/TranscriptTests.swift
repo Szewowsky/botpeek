@@ -175,3 +175,91 @@ final class DeliveryVerifierTests: XCTestCase {
         XCTAssertTrue(DeliveryVerifier.choiceDelivered("A", before: before, after: answered))
     }
 }
+
+/// Grok Bot follows the system language. Labels as seen in Grok Bot 0.79.4 on a Polish Mac.
+final class PolishInterfaceTests: XCTestCase {
+    func testPolishSidebar() {
+        let ax = AXTreeBuilder(strings: .polish)
+        let window = ax.window(sidebar: ["Research Bot, Czeka na Ciebie", "Writer"], heading: nil, messages: [])
+        let entries = SidebarParser.entries(in: window)
+        XCTAssertEqual(entries?.map(\.label), ["Research Bot, Czeka na Ciebie", "Writer"], "Polish sidebar buttons are not bots")
+        let status = SidebarParser.statusText(of: entries![0], botName: "Research Bot")
+        XCTAssertEqual(status, "Czeka na Ciebie")
+        XCTAssertTrue(SidebarParser.statusIndicatesAttention(status))
+        XCTAssertTrue(SidebarParser.statusIndicatesAttention("Wymaga Twojego zatwierdzenia"))
+        XCTAssertFalse(SidebarParser.statusIndicatesAttention("Pracuje"))
+    }
+
+    func testPolishSidebarWithNestedLists() {
+        // Live layout: an AXGroup "Boty" holding "Lista Botów", "Przypięte Boty" and "Ukryte Boty".
+        let ax = AXTreeBuilder(strings: .polish)
+        let window = ax.node("AXWindow", title: "Grok Bot", [
+            ax.node("AXGroup", desc: "Boty", [
+                ax.button("Szukaj"),
+                ax.node("AXGroup", desc: "Przypięte Boty", [ax.button("Główny Bot")]),
+                ax.node("AXGroup", desc: "Lista Botów", [ax.button("Writer"), ax.button("Połącz aplikacje")]),
+            ]),
+        ])
+        XCTAssertEqual(SidebarParser.entries(in: window)?.map(\.label), ["Główny Bot", "Writer"])
+    }
+
+    func testPolishConversation() {
+        let ax = AXTreeBuilder(strings: .polish)
+        let window = ax.window(sidebar: ["Research Bot"], heading: "Research Bot", messages: [
+            ax.message("Ty", "21:50:01", ["Znajdź dostawców"]),
+            ax.message("Research Bot", "21:55:21", ["Znalazłem trzech.", "Z którym się skontaktować?"],
+                       buttons: ["Northwind", "Acme", "Globex"], dismiss: true),
+        ])
+        let conversation = TranscriptParser.parse(window: window)
+        XCTAssertTrue(conversation.hasTranscript)
+        XCTAssertNotNil(conversation.composerNodeID)
+        XCTAssertEqual(conversation.messages.map(\.sender), ["Ty", "Research Bot"])
+        XCTAssertEqual(conversation.messages[0].time, "21:50:01")
+        XCTAssertEqual(conversation.openQuestion?.options.map(\.label), ["Northwind", "Acme", "Globex"], "Ukryj pytanie is not an option")
+        XCTAssertEqual(TranscriptParser.content(from: conversation)?.kind, .choice)
+    }
+
+    func testPolishInlineQuestion() {
+        let ax = AXTreeBuilder(strings: .polish)
+        let window = ax.window(sidebar: [], heading: "Travel Planner", messages: [
+            ax.inlineQuestion("Travel Planner", "13:56:10", prompt: "Gotowe?", buttons: ["Tak"]),
+        ])
+        let question = TranscriptParser.parse(window: window).openQuestion
+        XCTAssertEqual(question?.prompt, "Gotowe?")
+        XCTAssertEqual(question?.options.map(\.label), ["Tak"], "a single button counts next to Własna odpowiedź")
+    }
+
+    func testPolishLastMessageFromUserIsNotAQuestion() {
+        let ax = AXTreeBuilder(strings: .polish)
+        let window = ax.window(sidebar: [], heading: "Writer", messages: [
+            ax.message("Writer", "10:00:00", ["Czy mam zacząć?"]),
+            ax.message("Ty", "10:00:05", ["Tak"]),
+        ])
+        XCTAssertNil(TranscriptParser.content(from: TranscriptParser.parse(window: window)))
+        let question = ax.window(sidebar: [], heading: "Writer", messages: [ax.message("Writer", "10:00:00", ["Czy mam zacząć?"])])
+        XCTAssertEqual(TranscriptParser.content(from: TranscriptParser.parse(window: question))?.kind, .question)
+    }
+
+    func testPolishSendButton() {
+        let ax = AXTreeBuilder(strings: .polish)
+        var window = ax.window(sidebar: [], heading: "Writer", messages: [])
+        window.children.append(ax.button("Prześlij"))
+        window.children.append(ax.button("Wyślij wiadomość"))
+        let conversation = TranscriptParser.parse(window: window)
+        XCTAssertEqual(conversation.sendButtonNodeID, window.children.last?.id, "Prześlij also means Upload, so it is never the send button")
+    }
+
+    func testPolishDelivery() {
+        func conversation(_ messages: [(String, String, String)]) -> ConversationSnapshot {
+            ConversationSnapshot(
+                heading: "Bot", hasTranscript: true,
+                messages: messages.map { TranscriptMessage(label: "\($0.0) \($0.1)", sender: $0.0, time: $0.1, text: $0.2) },
+                openQuestion: nil, composerNodeID: 1, sendButtonNodeID: nil
+            )
+        }
+        let before = conversation([("Bot", "13:00:00", "Budżet?")])
+        let after = conversation([("Bot", "13:00:00", "Budżet?"), ("Ty", "13:00:09", "")])
+        XCTAssertTrue(DeliveryVerifier.textDelivered("Do 800 zł", before: before, after: after), "an empty new message from Ty counts")
+        XCTAssertFalse(DeliveryVerifier.textDelivered("Do 800 zł", before: before, after: before))
+    }
+}

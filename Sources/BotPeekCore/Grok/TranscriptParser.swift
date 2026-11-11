@@ -41,12 +41,11 @@ public struct ConversationSnapshot: Equatable, Sendable {
 }
 
 public enum TranscriptParser {
-    /// The sender label Grok Bot uses for the user's own messages.
-    public static let defaultUserSender = "You"
-    static let dismissQuestionLabel = "Dismiss question"
-    static let customAnswerLabel = "Custom answer"
-    static let messageActionsPrefix = "Message actions"
-    static let sendButtonLabels: Set<String> = ["Send", "Send message", "Submit"]
+    /// The sender labels Grok Bot uses for the user's own messages, one per language.
+    public static let defaultUserSenders = GrokBotLabels.userSenders
+    static let dismissQuestionLabels = GrokBotLabels.dismissQuestion
+    static let customAnswerLabels = GrokBotLabels.customAnswer
+    static let sendButtonLabels = GrokBotLabels.sendButtons
 
     // "<sender> 9:55:21 PM" or "<sender> 21:55:21". `\s` also matches the
     // narrow no-break space macOS puts before AM/PM.
@@ -64,11 +63,12 @@ public enum TranscriptParser {
                 .first { !$0.isEmpty } ?? ""
         }
         let composer = root.first {
-            $0.role == "AXTextArea" && ($0.axDescription == "Prompt" || $0.title == "Prompt")
+            $0.role == "AXTextArea"
+                && [$0.axDescription, $0.title].contains { $0.map(GrokBotLabels.composer.contains) ?? false }
         }
         let sendButton = root.first { $0.role == "AXButton" && sendButtonLabels.contains($0.label) }
 
-        guard let transcript = root.first(where: { $0.axDescription == "Conversation transcript" }) else {
+        guard let transcript = root.first(where: { $0.axDescription.map(GrokBotLabels.transcript.contains) ?? false }) else {
             return ConversationSnapshot(
                 heading: heading, hasTranscript: false, messages: [], openQuestion: nil,
                 composerNodeID: composer?.id, sendButtonNodeID: sendButton?.id
@@ -175,14 +175,14 @@ public enum TranscriptParser {
     static func dismissibleQuestion(in transcript: AXNodeSnapshot) -> OpenQuestion? {
         var questionGroup: AXNodeSnapshot?
         for (node, parent) in transcript.descendants()
-        where node.role == "AXButton" && node.label == dismissQuestionLabel {
+        where node.role == "AXButton" && dismissQuestionLabels.contains(node.label) {
             questionGroup = parent
         }
         guard let group = questionGroup else { return nil }
 
         let options = group.descendants()
             .map(\.node)
-            .filter { $0.role == "AXButton" && !$0.label.isEmpty && $0.label != dismissQuestionLabel }
+            .filter { $0.role == "AXButton" && !$0.label.isEmpty && !dismissQuestionLabels.contains($0.label) }
             .map { OpenQuestion.Option(label: $0.label.trimmingCharacters(in: .whitespacesAndNewlines), nodeID: $0.id) }
         guard !options.isEmpty else { return nil }
 
@@ -195,15 +195,15 @@ public enum TranscriptParser {
     /// with the question, optionally with a "Custom answer" box, and no dismiss
     /// button. Only the newest message counts: older unanswered questions stay
     /// on screen with working buttons, and the bot has moved on from them.
-    static func inlineQuestion(in transcript: AXNodeSnapshot, userSender: String = defaultUserSender) -> OpenQuestion? {
+    static func inlineQuestion(in transcript: AXNodeSnapshot, userSenders: Set<String> = defaultUserSenders) -> OpenQuestion? {
         guard let newest = messageGroups(in: transcript).last,
-              parseLabel(newest.title ?? "")?.sender != userSender
+              !userSenders.contains(parseLabel(newest.title ?? "")?.sender ?? "")
         else { return nil }
         let group = newest.descendants().map(\.node).last { node in
             let label = node.axDescription ?? ""
             let buttons = node.children.filter { $0.role == "AXButton" && !$0.label.isEmpty }
-            let hasCustomAnswer = node.first(maxDepth: 2) { $0.role == "AXTextArea" && $0.label == customAnswerLabel } != nil
-            return node.role == "AXGroup" && !label.isEmpty && !label.hasPrefix(messageActionsPrefix)
+            let hasCustomAnswer = node.first(maxDepth: 2) { $0.role == "AXTextArea" && customAnswerLabels.contains($0.label) } != nil
+            return node.role == "AXGroup" && !label.isEmpty && !GrokBotLabels.hasMessageActionsPrefix(label)
                 && !buttons.isEmpty && (buttons.count >= 2 || hasCustomAnswer)
         }
         guard let group else { return nil }
@@ -218,14 +218,14 @@ public enum TranscriptParser {
     /// Turns what is visible in the conversation into a request BotPeek can show.
     public static func content(
         from conversation: ConversationSnapshot,
-        userSender: String = defaultUserSender
+        userSenders: Set<String> = defaultUserSenders
     ) -> AttentionContent? {
         if let question = conversation.openQuestion {
             let choices = question.options.map { AttentionChoice(label: $0.label) }
             let kind: AttentionKind = ApprovalHeuristics.looksLikeApproval(choices) ? .approval : .choice
             return AttentionContent(kind: kind, prompt: question.prompt, choices: choices, source: .transcript)
         }
-        guard let last = conversation.messages.last, last.sender != userSender, !last.text.isEmpty else {
+        guard let last = conversation.messages.last, !userSenders.contains(last.sender), !last.text.isEmpty else {
             return nil
         }
         return AttentionContent(kind: .question, prompt: last.text, choices: [], source: .transcript)
@@ -246,14 +246,14 @@ public enum DeliveryVerifier {
         _ text: String,
         before: ConversationSnapshot,
         after: ConversationSnapshot,
-        userSender: String = TranscriptParser.defaultUserSender
+        userSenders: Set<String> = TranscriptParser.defaultUserSenders
     ) -> Bool {
         let known = Set(before.messages.map(\.label))
         let needle = String(normalize(text).prefix(60))
         return after.messages.contains { message in
             guard !known.contains(message.label) else { return false }
             let body = normalize(message.text)
-            return (message.sender == userSender && (needle.isEmpty || body.contains(needle) || body.isEmpty))
+            return (userSenders.contains(message.sender) && (needle.isEmpty || body.contains(needle) || body.isEmpty))
                 || (!needle.isEmpty && body.contains(needle))
         }
     }

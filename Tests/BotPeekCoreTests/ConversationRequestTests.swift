@@ -105,6 +105,16 @@ final class ConversationRequestParserTests: XCTestCase {
         XCTAssertFalse(PlainQuestion.isQuestion(""))
     }
 
+    func testPolishPlainQuestionHeuristics() {
+        XCTAssertTrue(PlainQuestion.isQuestion("Które sklepy dają ankiety na paragonie?"))
+        XCTAssertTrue(PlainQuestion.isQuestion("Gotowe. Czy mam to wysłać teraz? 🙂"))
+        XCTAssertFalse(PlainQuestion.isQuestion("Gotowe. Coś jeszcze?"))
+        XCTAssertFalse(PlainQuestion.isQuestion("Zrobione! Czy mogę jeszcze w czymś pomóc?"))
+        XCTAssertFalse(PlainQuestion.isQuestion("W czym jeszcze mogę pomóc?"))
+        XCTAssertFalse(PlainQuestion.isQuestion("Potrzebujesz czegoś jeszcze?"))
+        XCTAssertFalse(PlainQuestion.isQuestion("Masz jakieś pytania?"))
+    }
+
     func testApprovalLabelsBecomeAnApproval() throws {
         let widget = #"{"prompt":"Send the invoice?","options":[{"label":"Approve"},{"label":"Deny"}]}"#
         XCTAssertEqual(try XCTUnwrap(open([Entry.widget("t1s0", widget: widget)])).content.kind, .approval)

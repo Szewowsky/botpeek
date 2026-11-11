@@ -81,15 +81,14 @@ public struct SidebarEntry: Equatable, Sendable {
 
 public enum SidebarParser {
     /// Buttons inside the sidebar list that are not bots.
-    static let nonBotLabels: Set<String> = ["Toggle compact sidebar", "Search", "New chat", "Connect apps"]
+    static let nonBotLabels = GrokBotLabels.nonBotButtons
 
-    static let attentionPhrases = [
-        "waiting for you", "needs you", "needs your", "awaiting your", "approval required",
-        "answer needed", "has a question", "needs approval",
-    ]
+    static let attentionPhrases = GrokBotLabels.attentionPhrases
 
     public static func findSidebar(in root: AXNodeSnapshot) -> AXNodeSnapshot? {
-        root.first { $0.axDescription == "Bots" || $0.title == "Bots" }
+        root.first { node in
+            [node.axDescription, node.title].contains { $0.map(GrokBotLabels.sidebar.contains) ?? false }
+        }
     }
 
     public static func entries(in root: AXNodeSnapshot) -> [SidebarEntry]? {

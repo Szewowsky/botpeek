@@ -158,7 +158,7 @@ final class GrokAccessibilityDriver: @unchecked Sendable {
     /// one is from `bot`.
     static func showsOwnMessages(_ conversation: ConversationSnapshot, of bot: BotIdentity) -> Bool {
         let senders = Set(conversation.messages.map(\.sender))
-        return senders.contains(bot.name) && senders.isSubset(of: [bot.name, TranscriptParser.defaultUserSender])
+        return senders.contains(bot.name) && senders.isSubset(of: TranscriptParser.defaultUserSenders.union([bot.name]))
     }
 
     private static func milliseconds(since date: Date) -> Int {
