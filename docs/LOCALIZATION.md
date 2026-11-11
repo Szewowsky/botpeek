@@ -85,6 +85,20 @@ the bot's, not Grok Bot's interface. Polish sign-offs that don't count as a ques
 (for example "Coś jeszcze?", "Czy mogę jeszcze w czymś pomóc?", "Masz jakieś pytania?").
 These are BotPeek's own list, not Grok Bot strings.
 
+### Approve and deny words
+
+Options that start with these words (any letter case) make a question an approval,
+which BotPeek handles only with "Approve or deny inline" on and a second click.
+Bots name their options themselves, so these are BotPeek's own list
+(`GrokBotLabels.approveWords` / `denyWords`), not Grok Bot strings:
+
+| Kind | English | Polish |
+|---|---|---|
+| Approve | approve, allow, accept, confirm, "yes, run", run it, proceed, continue | zatwierdź, zezwól, akceptuj, potwierdź, kontynuuj, uruchom, "tak, uruchom" |
+| Deny | deny, reject, decline, don't allow, do not allow, cancel, block | odrzuć, odmów, anuluj, zablokuj, nie zezwalaj |
+
+"Tak" and "Nie" alone stay a plain choice: yes/no without context isn't an approval.
+
 ## Deliberate omissions
 
 - **Prześlij.** Polish uses the same word for "Submit" (`hQRttt`) and "Upload"

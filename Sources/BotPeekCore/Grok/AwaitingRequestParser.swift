@@ -164,8 +164,8 @@ public enum AwaitingRequestParser {
 
 /// Recognizes approve/deny style options.
 public enum ApprovalHeuristics {
-    static let approveWords = ["approve", "allow", "accept", "confirm", "yes, run", "run it", "proceed", "continue"]
-    static let denyWords = ["deny", "reject", "decline", "don't allow", "don’t allow", "do not allow", "cancel", "block"]
+    static let approveWords = GrokBotLabels.approveWords
+    static let denyWords = GrokBotLabels.denyWords
 
     public static func isApproveLabel(_ label: String) -> Bool {
         let text = label.lowercased()

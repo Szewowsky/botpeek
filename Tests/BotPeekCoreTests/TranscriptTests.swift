@@ -314,6 +314,28 @@ final class PolishInterfaceTests: XCTestCase {
         XCTAssertEqual(conversation.sendButtonNodeID, window.children[1].children.last?.id, "Prześlij also means Upload, so it is never the send button")
     }
 
+    func testPolishApprovalWords() {
+        func kind(_ labels: [String]) -> Bool { ApprovalHeuristics.looksLikeApproval(labels.map { AttentionChoice(label: $0) }) }
+        let pairs = [
+            ["Zatwierdź", "Odrzuć"], ["Zezwól", "Odmów"], ["Akceptuj", "Anuluj"], ["Potwierdź", "Zablokuj"],
+            ["Kontynuuj", "Nie zezwalaj"], ["Uruchom", "Anuluj"], ["Tak, uruchom", "Odrzuć"],
+            ["ZATWIERDŹ", "ODRZUĆ"], ["Zatwierdz\u{301}", "Odrzuc\u{301}"],
+        ]
+        for pair in pairs { XCTAssertTrue(kind(pair), pair.joined(separator: "/")) }
+        XCTAssertTrue(ApprovalHeuristics.isApproveLabel("Zezwól raz"))
+        XCTAssertTrue(ApprovalHeuristics.isDenyLabel("Nie zezwalaj"))
+        XCTAssertFalse(ApprovalHeuristics.isApproveLabel("Nie zezwalaj"), "a refusal is never an approval")
+        XCTAssertFalse(kind(["Tak", "Nie"]), "yes/no without context stays a plain choice")
+        XCTAssertFalse(kind(["Takie", "Inne"]))
+        XCTAssertTrue(kind(["Approve", "Deny"]), "English as before")
+
+        let ax = AXTreeBuilder(strings: .polish)
+        let window = ax.window(sidebar: [], heading: "Ops Bot", messages: [
+            ax.message("Ops Bot", "8:00:00", ["Uruchomić migrację?"], buttons: ["Zatwierdź", "Odrzuć"], dismiss: true),
+        ])
+        XCTAssertEqual(TranscriptParser.content(from: TranscriptParser.parse(window: window))?.kind, .approval)
+    }
+
     func testPolishDelivery() {
         func conversation(_ messages: [(String, String, String)]) -> ConversationSnapshot {
             ConversationSnapshot(

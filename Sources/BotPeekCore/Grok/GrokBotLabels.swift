@@ -53,6 +53,19 @@ public enum GrokBotLabels {
     /// it for "Upload".
     static let sendButtons: Set<String> = ["Send", "Send message", "Submit", "Wyślij", "Wyślij wiadomość"]
 
+    /// Lowercased beginnings of option labels that approve or deny an action.
+    /// These are BotPeek's own lists, not Grok Bot strings: bots name their
+    /// options themselves. "Tak"/"Nie" alone are left out on purpose: yes/no
+    /// without context is a plain choice.
+    static let approveWords = [
+        "approve", "allow", "accept", "confirm", "yes, run", "run it", "proceed", "continue",
+        "zatwierdź", "zezwól", "akceptuj", "potwierdź", "kontynuuj", "uruchom", "tak, uruchom",
+    ]
+    static let denyWords = [
+        "deny", "reject", "decline", "don't allow", "don’t allow", "do not allow", "cancel", "block",
+        "odrzuć", "odmów", "anuluj", "zablokuj", "nie zezwalaj",
+    ]
+
     static func hasMessageActionsPrefix(_ label: String) -> Bool {
         messageActionsPrefixes.contains { label.hasPrefix($0) }
     }
