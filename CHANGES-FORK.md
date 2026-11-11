@@ -25,8 +25,18 @@ A personal build of [BotPeek](https://github.com/deni0107/botpeek) (MIT, see
   button, opens the folder, and afterwards closes the folder and makes the sidebar
   compact again. A sidebar the user made full stays full. In a narrow background
   window Grok Bot applied the switch back to compact only some 15-30 s later.
-- **Tests:** `PolishInterfaceTests`, `testPolishPlainQuestionHeuristics` and
-  `SidebarFolderTests`.
+- **Safer replies.** The send button is looked for only next to the "Prompt" box
+  (its parent, then grandparent), never in the transcript, and exactly one must
+  match; otherwise nothing is pressed, so a bot's own "Send"/"Wyślij" option is
+  never taken for it. Requests that must be answered in Grok Bot (cached approvals,
+  forms) are never read from the window, a window reading never lifts that lock or
+  turns an approval into a plain choice, and `ReplyCoordinator` rejects any reply
+  to them. Polish approve and deny words ("Zatwierdź", "Odrzuć", …) count as an
+  approval; the list is in `docs/LOCALIZATION.md`.
+- **Tests:** `PolishInterfaceTests`, `testPolishPlainQuestionHeuristics`,
+  `SidebarFolderTests`, `SendButtonTests`,
+  `testGrokBotOnlyRequestsKeepTheirLockAfterAWindowReading` and
+  `testGrokBotOnlyRequestsRejectEveryReply`.
 - **Bundle identifier** `io.github.szewowsky.botpeek` (upstream:
   `io.github.deni0107.botpeek`), so this build has its own Accessibility permission
   and settings and doesn't collide with an installed upstream copy.
