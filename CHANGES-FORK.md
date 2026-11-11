@@ -27,7 +27,8 @@ A personal build of [BotPeek](https://github.com/deni0107/botpeek) (MIT, see
   window Grok Bot applied the switch back to compact only some 15-30 s later.
 - **Safer replies.** The send button is looked for outward from the "Prompt" box
   (its parent, then each wider ancestor, never the window itself), never in the
-  transcript, and exactly one must match at the nearest level that has any;
+  transcript, a message, a question card or the sidebar's bot list, and exactly
+  one must match at the nearest level that has any;
   otherwise nothing is pressed, so a bot's own "Send"/"Wyślij" option is never
   taken for it. Requests that must be answered in Grok Bot (cached approvals,
   forms) are never read from the window, a window reading never lifts that lock or
