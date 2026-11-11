@@ -2,12 +2,11 @@
 > **This is a fork** of [deni0107/botpeek](https://github.com/deni0107/botpeek). It adds
 > support for Grok Bot's Polish interface, for bots filed in collapsed sidebar folders
 > and for the compact sidebar. Details: [CHANGES-FORK.md](CHANGES-FORK.md).
-> There is no ready-made download for this fork: the Download link below gets the
-> original app. Build this version from source (see "Build from source").
 >
 > **Po polsku:** to wersja BotPeek, która działa z polskim interfejsem Grok Bota, z botami
-> w zwiniętych folderach i z wąskim paskiem bocznym. Nie ma gotowego pliku do pobrania -
-> zbuduj ją ze źródeł: `./scripts/build-app.sh`, wynik trafia do `dist/BotPeek.app`.
+> w zwiniętych folderach i z wąskim paskiem bocznym. Pobierz plik DMG z
+> [najnowszego wydania](https://github.com/Szewowsky/botpeek/releases/latest), przeciągnij
+> BotPeek do Aplikacji i przy pierwszym uruchomieniu zezwól na Dostępność (Accessibility).
 
 <div align="center">
 
@@ -20,7 +19,7 @@
 When a bot needs an answer or an approval, it peeks out from the edge of your Mac's
 screen, takes your reply, and hops back out of sight.
 
-[Download](https://github.com/deni0107/botpeek/releases/latest) ·
+[Download](https://github.com/Szewowsky/botpeek/releases/latest) ·
 [How it works](docs/INTEGRATION.md)
 
 [![CI](https://github.com/deni0107/botpeek/actions/workflows/ci.yml/badge.svg)](https://github.com/deni0107/botpeek/actions/workflows/ci.yml)
@@ -54,7 +53,7 @@ screen, takes your reply, and hops back out of sight.
 
 ## Install
 
-1. Download the DMG from the [latest release](https://github.com/deni0107/botpeek/releases/latest)
+1. Download the DMG from the [latest release](https://github.com/Szewowsky/botpeek/releases/latest)
    and drag BotPeek into Applications. Requires macOS 14 or newer.
 2. If macOS says it can't verify the developer, go to **System Settings → Privacy &
    Security** and click **Open Anyway**.

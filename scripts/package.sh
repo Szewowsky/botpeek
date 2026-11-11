@@ -2,6 +2,8 @@
 # Packages dist/BotPeek.app into a drag-to-Applications DMG and a ZIP, with
 # SHA-256 checksums. Notarizes and staples when Apple credentials are set:
 #   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_SPECIFIC_PASSWORD
+# or, on your own Mac, NOTARY_PROFILE (a profile saved with
+# `xcrun notarytool store-credentials`).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,6 +20,11 @@ DMG="$DIST/$NAME.dmg"
 
 notarize() {
   local file="$1"
+  if [[ -n "${NOTARY_PROFILE:-}" ]]; then
+    echo "==> Notarizing $(basename "$file")"
+    xcrun notarytool submit "$file" --keychain-profile "$NOTARY_PROFILE" --wait
+    return 0
+  fi
   if [[ -n "${APPLE_ID:-}" && -n "${APPLE_TEAM_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]]; then
     echo "==> Notarizing $(basename "$file")"
     xcrun notarytool submit "$file" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
@@ -43,7 +50,7 @@ rm -f "$ZIP" "$DMG" "$DIST/SHA256SUMS.txt"
 
 # Notarize the app itself first (via a temporary zip) so both archives contain a stapled app.
 NOTARIZED=false
-if [[ -n "${APPLE_ID:-}" ]]; then
+if [[ -n "${APPLE_ID:-}" || -n "${NOTARY_PROFILE:-}" ]]; then
   ditto -c -k --keepParent "$APP" "$DIST/notarize.zip"
   notarize "$DIST/notarize.zip"
   staple "$APP"
@@ -70,7 +77,7 @@ ln -s /Applications "$STAGING/Applications"
     echo
   fi
   echo "BotPeek is free, open source (MIT) and not affiliated with Grok Bot, xAI or Cursor."
-  echo "https://github.com/deni0107/botpeek"
+  echo "https://github.com/Szewowsky/botpeek"
 } > "$STAGING/Read Me First.txt"
 hdiutil create -volname "BotPeek $VERSION" -srcfolder "$STAGING" -ov -format UDZO "$DMG"
 rm -rf "$STAGING"
