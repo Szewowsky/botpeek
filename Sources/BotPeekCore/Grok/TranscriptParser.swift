@@ -92,29 +92,45 @@ public enum TranscriptParser {
     /// Grok Bot's own send button, the one nearest the message box.
     ///
     /// Bots choose their options' labels, and an option may read "Send" or
-    /// "Wyślij", so the button is never looked for inside the transcript. The
-    /// search starts at the message box's parent and widens one ancestor at a
-    /// time (never to the window itself). Exactly one match is required at the
-    /// nearest level that has any; anything else gives `nil`, and nothing is
-    /// pressed.
+    /// "Wyślij", so the button is never looked for where bots or users name
+    /// things: the transcript, any message or question group, and the sidebar
+    /// (`holdsNamedContent`). The search starts at the message box's parent and
+    /// widens one ancestor at a time (never to the window itself). Exactly one
+    /// match is required at the nearest level that has any; anything else gives
+    /// `nil`, and nothing is pressed.
     static func sendButton(near composer: AXNodeSnapshot, in root: AXNodeSnapshot) -> AXNodeSnapshot? {
         guard let path = path(to: composer.id, in: root) else { return nil }
         // Ancestors of the message box, nearest first, without the window itself.
         let ancestors = path.dropLast().dropFirst().reversed()
+        var searched: Int?
         for scope in ancestors {
             var matches: [AXNodeSnapshot] = []
             func collect(_ node: AXNodeSnapshot) {
                 for child in node.children {
-                    if child.axDescription.map(GrokBotLabels.transcript.contains) ?? false { continue }
+                    // The narrower scope was searched already and had no button.
+                    if child.id == searched || holdsNamedContent(child) { continue }
                     if child.role == "AXButton", sendButtonLabels.contains(child.label) { matches.append(child) }
                     collect(child)
                 }
             }
             collect(scope)
-            if matches.isEmpty { continue }
-            return matches.count == 1 ? matches[0] : nil
+            if !matches.isEmpty { return matches.count == 1 ? matches[0] : nil }
+            searched = scope.id
         }
         return nil
+    }
+
+    /// True for a subtree whose buttons are labelled by bots or by the user:
+    /// the transcript, a message, an open question, or the sidebar's bot list.
+    static func holdsNamedContent(_ node: AXNodeSnapshot) -> Bool {
+        node.first { candidate in
+            [candidate.axDescription, candidate.title].contains { label in
+                label.map { GrokBotLabels.transcript.contains($0) || GrokBotLabels.sidebar.contains($0) } ?? false
+            }
+                || parseLabel(candidate.title ?? "") != nil
+                || (candidate.role == "AXButton" && dismissQuestionLabels.contains(candidate.label))
+                || (candidate.role == "AXTextArea" && customAnswerLabels.contains(candidate.label))
+        } != nil
     }
 
     /// The nodes from `root` down to the node with `id`, both included.

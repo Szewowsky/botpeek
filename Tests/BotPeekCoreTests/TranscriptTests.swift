@@ -215,6 +215,30 @@ final class SendButtonTests: XCTestCase {
         XCTAssertEqual(TranscriptParser.parse(window: root).sendButtonNodeID, send.id)
     }
 
+    func testQuestionOutsideTheTranscriptIsNeverTheSendButton() {
+        // A question card docked beside the message box, outside the transcript:
+        // its "Wyślij" option must not be pressed while Grok Bot's own button is absent.
+        let ax = AXTreeBuilder(strings: .polish)
+        let card = ax.node("AXGroup", [ax.button("Wyślij"), ax.button("Anuluj"), ax.button(ax.strings.dismissQuestion)])
+        let root = window(ax, composerExtras: [card])
+        XCTAssertNil(TranscriptParser.parse(window: root).sendButtonNodeID)
+    }
+
+    func testBotNamedLikeTheSendButtonIsNeverTheSendButton() {
+        // A sidebar button for a bot the user named "Wyślij".
+        let ax = AXTreeBuilder(strings: .polish)
+        let root = ax.node("AXWindow", title: "Grok Bot", [
+            ax.node("AXGroup", [
+                ax.node("AXList", desc: ax.strings.bots, [ax.button("Wyślij")]),
+                ax.node("AXGroup", [
+                    ax.node("AXHeading", desc: "Mail Bot"),
+                    ax.node("AXGroup", [ax.node("AXTextArea", desc: ax.strings.prompt)]),
+                ]),
+            ]),
+        ])
+        XCTAssertNil(TranscriptParser.parse(window: root).sendButtonNodeID)
+    }
+
     func testSendButtonNextToTheBoxInBothLanguages() {
         for (strings, label) in [(GrokUIStrings.english, "Send message"), (.polish, "Wyślij wiadomość")] {
             let ax = AXTreeBuilder(strings: strings)
