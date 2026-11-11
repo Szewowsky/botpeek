@@ -137,6 +137,35 @@ final class ReplyCoordinatorTests: XCTestCase {
         XCTAssertEqual(state, .failed(.approvalRequiresGrokBot))
     }
 
+    func testGrokBotOnlyRequestsRejectEveryReply() async {
+        approvalsAllowed = true
+        let form = AttentionObservation(
+            bot: research, fingerprint: "r2",
+            content: AttentionContent(kind: .handoff, prompt: "Hasło", choices: [AttentionChoice(label: "Dalej")], source: .conversation,
+                                      grokBotOnlyReason: "Fill this in securely in Grok Bot."),
+            source: .conversation
+        )
+        let approval = AttentionObservation(
+            bot: travel, fingerprint: "t2",
+            content: AttentionContent(kind: .approval, prompt: "Run it?", choices: [AttentionChoice(label: "Approve"), AttentionChoice(label: "Deny")],
+                                      source: .conversation, grokBotOnlyReason: "Review this approval in Grok Bot."),
+            source: .conversation
+        )
+        manager.ingest(snapshot(at: 1, bots: [research, travel, ops], attention: [form, approval]))
+        let replies = coordinator()
+        let replyCases: [(Reply, RequestID)] = [
+            (.text("sekret123"), id(research, "r2")),
+            (.choice(AttentionChoice(label: "Dalej")), id(research, "r2")),
+            (.approval(.approve, option: AttentionChoice(label: "Approve")), id(travel, "t2")),
+            (.choice(AttentionChoice(label: "Approve")), id(travel, "t2")),
+        ]
+        for (reply, requestID) in replyCases {
+            let state = await replies.send(reply, for: requestID)
+            XCTAssertEqual(state, .failed(.approvalRequiresGrokBot), reply.logDescription)
+        }
+        XCTAssertTrue(service.deliveries.isEmpty, "Grok Bot-only requests are answered only in Grok Bot")
+    }
+
     func testStateChangesAreReported() async {
         let replies = coordinator()
         var seen: [DeliveryState] = []

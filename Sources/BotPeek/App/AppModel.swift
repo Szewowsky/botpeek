@@ -357,14 +357,17 @@ final class AppModel: ObservableObject {
     // MARK: Conversation
 
     private func autoloadContent(for request: AttentionRequest) {
-        guard !request.content.hasReadableContent, !integration.isDemo else { return }
+        guard !request.content.hasReadableContent, request.content.grokBotOnlyReason == nil, !integration.isDemo else { return }
         Task { await loadContent(for: request.id, allowNavigation: false) }
     }
 
     /// Reads the question from Grok Bot's conversation. With navigation, this
-    /// switches Grok Bot to the bot's chat (in the background).
+    /// switches Grok Bot to the bot's chat (in the background). Requests that
+    /// must be answered in Grok Bot (cached approvals, forms) are never read
+    /// from the window: they are only ever opened there.
     func loadContent(for id: RequestID, allowNavigation: Bool) async {
-        guard let request = manager.request(id), !loadingContent.contains(id) else { return }
+        guard let request = manager.request(id), request.content.grokBotOnlyReason == nil,
+              !loadingContent.contains(id) else { return }
         loadingContent.insert(id)
         contentErrors[id] = nil
         defer { loadingContent.remove(id) }

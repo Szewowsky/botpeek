@@ -199,6 +199,51 @@ final class AttentionEventManagerTests: XCTestCase {
         manager.markReplyFailed(id)
         XCTAssertEqual(manager.request(id)?.status, .pending)
     }
+
+    // MARK: Grok Bot-only requests
+
+    /// An approval without a summary and a form without a title, as read from
+    /// Grok Bot's cached conversation, then read again from its window.
+    func testGrokBotOnlyRequestsKeepTheirLockAfterAWindowReading() {
+        let cases: [(AttentionKind, String)] = [
+            (.approval, "Review this approval in Grok Bot."),
+            (.handoff, "Fill this in securely in Grok Bot."),
+        ]
+        for (kind, reason) in cases {
+            let manager = makeManager(delay: 0)
+            let cached = AttentionObservation(
+                bot: ops, fingerprint: "o1",
+                content: AttentionContent(kind: kind, prompt: nil, source: .conversation, grokBotOnlyReason: reason),
+                source: .conversation
+            )
+            manager.ingest(snapshot(at: 0, bots: [ops], attention: [cached]))
+            let id = RequestID(botID: ops.id, fingerprint: "o1")
+            XCTAssertFalse(manager.request(id)!.content.hasReadableContent)
+
+            let fromWindow = AttentionContent(
+                kind: .choice, prompt: "Uruchomić?",
+                choices: [AttentionChoice(label: "Tak"), AttentionChoice(label: "Nie")], source: .transcript
+            )
+            manager.updateContent(id, fromWindow)
+            XCTAssertEqual(manager.request(id)?.content.grokBotOnlyReason, reason, "\(kind)")
+            XCTAssertEqual(manager.request(id)?.content.kind, kind, "never lowered to a plain choice")
+
+            // The next read of the cache doesn't lose it either.
+            manager.ingest(snapshot(at: 1, bots: [ops], attention: [cached]))
+            XCTAssertEqual(manager.request(id)?.content.grokBotOnlyReason, reason, "\(kind)")
+            XCTAssertEqual(manager.request(id)?.content.kind, kind)
+        }
+    }
+
+    func testWindowReadingStillFillsInOrdinaryRequests() {
+        let manager = makeManager(delay: 0)
+        manager.ingest(snapshot(at: 0, bots: [research], attention: [observation(research, "f1", prompt: nil)]))
+        let id = RequestID(botID: research.id, fingerprint: "f1")
+        manager.updateContent(id, AttentionContent(kind: .choice, prompt: "Który?", choices: [AttentionChoice(label: "Acme")], source: .transcript))
+        XCTAssertEqual(manager.request(id)?.content.kind, .choice)
+        XCTAssertEqual(manager.request(id)?.content.prompt, "Który?")
+        XCTAssertNil(manager.request(id)?.content.grokBotOnlyReason)
+    }
 }
 
 final class MultiBotQueueTests: XCTestCase {

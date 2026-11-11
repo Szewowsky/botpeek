@@ -298,9 +298,17 @@ public final class AttentionEventManager {
 
     /// Replaces a request's content with a better reading, e.g. the question
     /// text read from the conversation when the roster had no details.
+    ///
+    /// A reading never lifts a request's "Grok Bot only" lock and never turns an
+    /// approval or a handoff into a plain choice: those come from Grok Bot's own
+    /// data, a window reading only guesses from button labels.
     @discardableResult
     public func updateContent(_ id: RequestID, _ content: AttentionContent) -> AttentionRequest? {
         guard let index = requests.firstIndex(where: { $0.id == id }), content.hasReadableContent else { return request(id) }
+        let previous = requests[index].content
+        var content = content
+        if content.grokBotOnlyReason == nil { content.grokBotOnlyReason = previous.grokBotOnlyReason }
+        if previous.kind == .approval || previous.kind == .handoff { content.kind = previous.kind }
         requests[index].content = content
         return requests[index]
     }

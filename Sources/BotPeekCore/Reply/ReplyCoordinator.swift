@@ -43,6 +43,8 @@ public final class ReplyCoordinator {
         guard let request else { return .requestNoLongerActive }
         if case .answered = request.status { return .requestNoLongerActive }
         if states[request.id] == .sending || request.status == .replying { return .alreadySending }
+        // Answered only in Grok Bot itself (cached approvals, forms), whatever the view offers.
+        if request.content.grokBotOnlyReason != nil { return .approvalRequiresGrokBot }
         switch reply {
         case .text(let text):
             guard service.capabilities.text else { return .unsupported }
